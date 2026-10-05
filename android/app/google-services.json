@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "123456789012",
+    "project_number": "549760991423",
     "project_id": "dr-cubie-app",
-    "storage_bucket": "dr-cubie-app.appspot.com"
+    "storage_bucket": "dr-cubie-app.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789012:android:abcdef1234567890",
+        "mobilesdk_app_id": "1:549760991423:android:72d840339e128ba219060a",
         "android_client_info": {
           "package_name": "com.drcubie.app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSy_YOUR_FIREBASE_ANDROID_CLIENT_KEY_HERE"
+          "current_key": "AIzaSyDUsFQ86MqV0SUE9Z9IGyFYc2FMBdTyQ3Q"
         }
       ],
       "services": {

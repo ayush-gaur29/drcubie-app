@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { INITIAL_SPARKS } from '../data/sparks';
 import { ALL_AUDIOS } from '../data/audios';
 import { useAuth } from './AuthContext';
 import { recordContentActivity } from '../services/activityService';
@@ -45,7 +44,7 @@ const isValidAudioUrl = (url) => {
 export const AudioProvider = ({ children }) => {
   const { user, profile, isAuthenticated, isVip } = useAuth();
 
-  const [currentTrack, setCurrentTrack] = useState(INITIAL_SPARKS[0]);
+  const [currentTrack, setCurrentTrack] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(180);

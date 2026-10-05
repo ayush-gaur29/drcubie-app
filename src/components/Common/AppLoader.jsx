@@ -90,9 +90,8 @@ export const AppLoader = ({
 
       {/* Centered branded content */}
       <div className="drcubie-loader-card">
-        {/* Logo with breathing aura */}
+        {/* Brand Logo - clean without border or outline */}
         <div className="drcubie-loader-logo-wrap">
-          <div className="drcubie-loader-aura" aria-hidden="true" />
           <div className="drcubie-loader-logo-frame">
             <img
               src="/assets/images/brand-logo.png"
@@ -100,8 +99,7 @@ export const AppLoader = ({
               className="drcubie-loader-logo-img"
               onError={(e) => {
                 e.currentTarget.onerror = null;
-                e.currentTarget.src =
-                  'https://lh3.googleusercontent.com/aida/AEtjO1VXwfwPa1C6ik_7a14YQlU2VskSqeDobMKZ98zKHrQ2Q1nEyy0ZlXoYmOr2UmBHixyl0w5f9SmG8G7-iZrJUgs_J3WT1aCepQnKDtO71D1XXOYK6BGmWZQWaTH5KmOnim2PkyQbq9zQZS_gw4eepoNxrrnB6kUICMc2CrAzVHTZOn6otp6OGuKYsy9BOMqWhGCoh-E1grwTUD6iorwn6KnH0Yj87FMExfE-MkohdtbeLDetlmQOlzNTYiZp';
+                e.currentTarget.src = '/logo.png';
               }}
             />
           </div>
@@ -148,17 +146,15 @@ export const BrandedLoader = ({
     >
       <div className="drcubie-loader-halo" aria-hidden="true" />
       <div className="drcubie-loader-card">
-        <div className="drcubie-loader-logo-wrap" style={{ width: '64px', height: '64px', marginBottom: '14px' }}>
-          <div className="drcubie-loader-aura" aria-hidden="true" />
-          <div className="drcubie-loader-logo-frame" style={{ borderRadius: '18px' }}>
+        <div className="drcubie-loader-logo-wrap drcubie-loader-logo-wrap--contained">
+          <div className="drcubie-loader-logo-frame">
             <img
               src="/assets/images/brand-logo.png"
               alt="Dr. Cubie Inspiration"
               className="drcubie-loader-logo-img"
               onError={(e) => {
                 e.currentTarget.onerror = null;
-                e.currentTarget.src =
-                  'https://lh3.googleusercontent.com/aida/AEtjO1VXwfwPa1C6ik_7a14YQlU2VskSqeDobMKZ98zKHrQ2Q1nEyy0ZlXoYmOr2UmBHixyl0w5f9SmG8G7-iZrJUgs_J3WT1aCepQnKDtO71D1XXOYK6BGmWZQWaTH5KmOnim2PkyQbq9zQZS_gw4eepoNxrrnB6kUICMc2CrAzVHTZOn6otp6OGuKYsy9BOMqWhGCoh-E1grwTUD6iorwn6KnH0Yj87FMExfE-MkohdtbeLDetlmQOlzNTYiZp';
+                e.currentTarget.src = '/logo.png';
               }}
             />
           </div>

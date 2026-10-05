@@ -1,28 +1,32 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { INITIAL_SPARKS } from '../data/sparks';
 import { fetchSparks } from '../services/sparksService';
 import { fetchUserSavedContent, toggleUserSavedContent } from '../services/savedContentService';
 import { useAuth } from './AuthContext';
 
 const SparksContext = createContext();
 
-const SCHEMA_VERSION = 'v3.0-supabase';
+const SCHEMA_VERSION = 'v4.0-sparks-supabase-only';
 
 export const SparksProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
 
   const [sparks, setSparks] = useState(() => {
     try {
+      const storedVersion = localStorage.getItem('daily_spark_schema_version');
+      if (storedVersion !== SCHEMA_VERSION) {
+        localStorage.removeItem('daily_spark_items');
+        return [];
+      }
       const stored = localStorage.getItem('daily_spark_items');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
-      return INITIAL_SPARKS;
+      return [];
     } catch {
-      return INITIAL_SPARKS;
+      return [];
     }
   });
 
@@ -44,7 +48,7 @@ export const SparksProvider = ({ children }) => {
   });
 
   /**
-   * Load sparks from Supabase and synchronize with user saved bookmarks
+   * Load sparks strictly from Supabase and synchronize with user saved bookmarks
    */
   const loadSparks = useCallback(async () => {
     try {
@@ -53,6 +57,7 @@ export const SparksProvider = ({ children }) => {
 
       // 1. Fetch published sparks from Supabase
       const dbSparks = await fetchSparks();
+      const validSparks = Array.isArray(dbSparks) ? dbSparks : [];
 
       // 2. If authenticated, fetch user saved items from public.saved_content
       let userSavedSet = new Set();
@@ -69,7 +74,7 @@ export const SparksProvider = ({ children }) => {
       setSavedItemsMap(newSavedMap);
 
       // 3. Merge saved state per user
-      const mergedSparks = dbSparks.map((spark) => {
+      const mergedSparks = validSparks.map((spark) => {
         const isUserSaved =
           userSavedSet.has(spark.db_id) ||
           userSavedSet.has(spark.id) ||
@@ -89,6 +94,7 @@ export const SparksProvider = ({ children }) => {
     } catch (err) {
       console.warn('[SparksContext] loadSparks note:', err);
       setError(err.message);
+      setSparks([]);
     } finally {
       setLoading(false);
     }

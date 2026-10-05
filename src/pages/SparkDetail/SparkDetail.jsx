@@ -25,7 +25,8 @@ export const SparkDetail = ({ sparkId, onBack }) => {
     (s) => s.id === sparkId || s.db_id === sparkId || s.slug === sparkId
   );
 
-  const [spark, setSpark] = useState(contextSpark || sparks[0] || null);
+  const [spark, setSpark] = useState(contextSpark || null);
+  const [loading, setLoading] = useState(!contextSpark);
 
   // If specific spark wasn't in cache, fetch directly from Supabase
   useEffect(() => {
@@ -33,12 +34,17 @@ export const SparkDetail = ({ sparkId, onBack }) => {
 
     if (contextSpark) {
       setSpark(contextSpark);
+      setLoading(false);
     } else if (sparkId) {
+      setLoading(true);
       fetchSparkById(sparkId).then((fetched) => {
-        if (mounted && fetched) {
+        if (mounted) {
           setSpark(fetched);
+          setLoading(false);
         }
       });
+    } else {
+      setLoading(false);
     }
 
     return () => {
@@ -83,10 +89,24 @@ export const SparkDetail = ({ sparkId, onBack }) => {
     showToast(!hasResonated ? 'Thank you for reflecting with us' : 'Resonance removed');
   };
 
-  if (!spark) {
+  if (loading) {
     return (
       <div className="spark-detail-screen animate-fade-in" style={{ padding: '60px 16px', textAlign: 'center' }}>
         <p className="font-body-md text-secondary">Loading wisdom spark...</p>
+      </div>
+    );
+  }
+
+  if (!spark) {
+    return (
+      <div className="spark-detail-screen animate-fade-in" style={{ padding: '60px 16px', textAlign: 'center' }}>
+        <h2 className="font-title-lg" style={{ marginBottom: '8px' }}>Spark not found</h2>
+        <p className="font-body-md text-secondary">This reflection is no longer available.</p>
+        {onBack && (
+          <button type="button" className="btn-pressable" onClick={onBack} style={{ marginTop: '16px', padding: '8px 16px', borderRadius: '8px' }}>
+            Go Back
+          </button>
+        )}
       </div>
     );
   }

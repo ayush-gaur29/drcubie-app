@@ -20,6 +20,7 @@ import { Profile } from './pages/Profile/Profile';
 import { Notifications } from './pages/Notifications/Notifications';
 import { Videos } from './pages/Videos/Videos';
 import { Audios } from './pages/Audios/Audios';
+import { Sparks } from './pages/Sparks/Sparks';
 import { Recommendations } from './pages/Recommendations/Recommendations';
 
 import {
@@ -288,7 +289,9 @@ const AppShell = () => {
   else if (route === 'vip-pass') activeTab = 'vip-pass';
   else if (route === 'profile') activeTab = 'profile';
 
-  const isSparkDetail = route.startsWith('spark/') || route.startsWith('sparks/');
+  const isSparkDetail =
+    (route.startsWith('spark/') && route !== 'spark') ||
+    (route.startsWith('sparks/') && route !== 'sparks');
   const currentSparkId = isSparkDetail ? route.replace(/^sparks?\//, '') : null;
 
   const isVideoDetail =
@@ -335,11 +338,19 @@ const AppShell = () => {
           {route === 'today' && (
             <Today
               onNavigateToSpark={navigateToSpark}
+              onNavigateToSparks={() => navigateTo('sparks')}
               onNavigateToVideos={() => navigateTo('videos')}
               onNavigateToAudios={() => navigateTo('audios')}
               onNavigateToRecommendations={() => navigateTo('recommendations')}
               onNavigateToVideo={navigateToVideo}
               onNavigateToAudio={navigateToAudio}
+            />
+          )}
+
+          {route === 'sparks' && (
+            <Sparks
+              onBack={handleBack}
+              onNavigateToSpark={navigateToSpark}
             />
           )}
 

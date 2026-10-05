@@ -4,18 +4,19 @@ import { useSparks } from '../../context/SparksContext';
 import { useAudio } from '../../context/AudioContext';
 import { VideoPlayer } from '../../components/VideoPlayer/VideoPlayer';
 import { ImageWithFallback } from '../../components/Common/ImageWithFallback';
-import { INITIAL_SPARKS } from '../../data/sparks';
-import { fetchTodayContent, normalizeSpark } from '../../services/sparksService';
+import { fetchTodayContent, fetchSparks, normalizeSpark } from '../../services/sparksService';
 import { fetchVideos, fetchVideoById, normalizeVideo } from '../../services/videosService';
 import { fetchAudios } from '../../services/audiosService';
 import { fetchRecommendations } from '../../services/recommendationsService';
 import { fetchUserActivity, recordContentActivity } from '../../services/activityService';
 import { useAccessControl } from '../../context/AccessControlContext';
 import { getUserPreferences, isSparkDeliveredForUser } from '../../services/userPreferencesService';
+import { supabase } from '../../lib/supabase';
 import './Today.css';
 
 export const Today = ({
   onNavigateToSpark,
+  onNavigateToSparks,
   onNavigateToVideos,
   onNavigateToAudios,
   onNavigateToRecommendations,
@@ -55,6 +56,7 @@ export const Today = ({
     quote: null,
     quoteAuthor: 'Dr. Cubie'
   });
+  const [todaySparks, setTodaySparks] = useState([]);
   const [videos, setVideos] = useState([]);
   const [audioTracks, setAudioTracks] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
@@ -85,6 +87,32 @@ export const Today = ({
     return () => window.removeEventListener('drcubie_preferences_updated', handlePrefUpdated);
   }, []);
 
+  // Synchronize sparks dynamically with Supabase realtime updates
+  useEffect(() => {
+    if (!supabase) return;
+    const sparksSub = supabase
+      .channel('today-sparks-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sparks' },
+        async () => {
+          try {
+            const freshSparks = await fetchSparks();
+            if (Array.isArray(freshSparks)) {
+              setTodaySparks(freshSparks);
+            }
+          } catch (e) {
+            console.warn('[Today] Error refreshing sparks on realtime update:', e);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(sparksSub);
+    };
+  }, []);
+
   // 1. Load Today global dynamic content from Supabase and user progress
   useEffect(() => {
     let mounted = true;
@@ -93,8 +121,9 @@ export const Today = ({
       try {
         setContentLoading(true);
 
-        const [todayRes, videosRes, audiosRes, recsRes] = await Promise.all([
+        const [todayRes, sparksRes, videosRes, audiosRes, recsRes] = await Promise.all([
           fetchTodayContent(),
+          fetchSparks(),
           fetchVideos(),
           fetchAudios(),
           fetchRecommendations()
@@ -113,6 +142,9 @@ export const Today = ({
           quote: todayRes?.quote || scheduledSpark?.reflection || null,
           quoteAuthor: todayRes?.quoteAuthor || 'Dr. Cubie'
         });
+
+        const publishedSparks = Array.isArray(sparksRes) ? sparksRes : [];
+        setTodaySparks(publishedSparks);
 
         const publishedVideos = Array.isArray(videosRes) ? videosRes : [];
         setVideos(publishedVideos);
@@ -413,6 +445,29 @@ export const Today = ({
       handleSparkClick(rec.sparkId || rec.contentId || rec.id);
     }
   };
+
+  const handleSparkCardClick = (spark) => {
+    requireAccess(spark, () => {
+      handleSparkClick(spark.slug || spark.id);
+
+      if (isAuthenticated && user?.id && (spark.db_id || spark.id)) {
+        recordContentActivity({
+          userId: user.id,
+          contentType: 'spark',
+          contentId: spark.db_id || spark.id,
+          progress: 25,
+          completed: false
+        });
+      }
+    });
+  };
+
+  const handleToggleSaveSpark = (e, spark) => {
+    if (e) e.stopPropagation();
+    toggleSaveContent('spark', spark.db_id || spark.id);
+  };
+
+  const displaySparks = todaySparks;
 
   const closeVideoModal = () => {
     setActiveVideoModal(null);
@@ -854,7 +909,117 @@ export const Today = ({
         )}
       </section>
 
-      {/* 5. DAILY REFLECTION (Connected to Supabase Spark Reflection) */}
+      {/* 5. SPARKS SECTION (Connected to public.sparks) */}
+      <section className="today-sparks-section" aria-label="Sparks Wisdom">
+        <div className="today-section-header">
+          <div className="today-section-title-wrap">
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>auto_awesome</span>
+            <h3 className="today-section-title">SPARKS</h3>
+          </div>
+          <button
+            className="today-view-all-btn"
+            onClick={() => (onNavigateToSparks ? onNavigateToSparks() : null)}
+            aria-label="View all sparks"
+          >
+            <span>View All ({displaySparks.length})</span>
+            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>arrow_forward</span>
+          </button>
+        </div>
+
+        {displaySparks.length === 0 && !contentLoading ? (
+          <div className="today-empty-notice">
+            <span className="material-symbols-outlined">auto_awesome</span>
+            <p>No sparks available</p>
+          </div>
+        ) : (
+          <div className="today-horizontal-scroll no-scrollbar" role="region" aria-label="Sparks Carousel">
+            {displaySparks.map((spark) => {
+              const isSaved = isContentSaved ? isContentSaved('spark', spark.db_id || spark.id) : spark.saved;
+              const sparkImage = spark.thumbnail_url || spark.image || '';
+              const categoryText = spark.categoryLabel || spark.category || '';
+              const durationText = spark.duration ? (spark.duration.includes('min') ? spark.duration : `${spark.duration} min`) : '';
+              const isVip = Boolean(spark.is_vip || spark.isVip);
+              const snippetText = spark.short_description || spark.reflection || '';
+
+              return (
+                <article
+                  key={spark.id || spark.db_id}
+                  className="today-spark-card"
+                  onClick={() => handleSparkCardClick(spark)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`View ${spark.title || 'Spark'} reflection`}
+                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleSparkCardClick(spark)}
+                >
+                  <div className="today-spark-thumb-wrap">
+                    <ImageWithFallback
+                      src={sparkImage}
+                      type="spark"
+                      alt={spark.title || 'Spark reflection'}
+                      className="today-spark-thumb-img"
+                    />
+                    <div className="today-spark-thumb-overlay" />
+                    {categoryText && <span className="today-spark-badge">{categoryText}</span>}
+                    {isVip && (
+                      <span className="card-vip-badge font-label-sm" style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 2 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '11px' }}>workspace_premium</span>
+                        VIP
+                      </span>
+                    )}
+
+                    <div className="today-spark-read-indicator" title={spark.title ? `Read ${spark.title}` : 'Read Spark'}>
+                      <span
+                        className="material-symbols-outlined"
+                        style={{ fontSize: '18px' }}
+                      >
+                        auto_awesome
+                      </span>
+                    </div>
+
+                    {durationText && <span className="today-spark-duration-pill">{durationText}</span>}
+                  </div>
+
+                  <div className="today-spark-card-body">
+                    <h4 className="today-spark-title" title={spark.title || ''}>
+                      {isVip ? `[VIP] ${spark.title || ''}` : (spark.title || '')}
+                    </h4>
+                    {snippetText && (
+                      <p className="today-spark-snippet" title={snippetText}>
+                        {snippetText}
+                      </p>
+                    )}
+                    <div className="today-spark-bottom-row">
+                      <span className="today-spark-action-label">
+                        <span>Read Spark</span>
+                        <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>arrow_forward</span>
+                      </span>
+                      <button
+                        type="button"
+                        className={`today-spark-save-btn ${isSaved ? 'saved' : ''}`}
+                        onClick={(e) => handleToggleSaveSpark(e, spark)}
+                        aria-label={isSaved ? `Remove ${spark.title || 'Spark'} from saved` : `Save ${spark.title || 'Spark'}`}
+                        title={isSaved ? 'Saved' : 'Save'}
+                      >
+                        <span
+                          className="material-symbols-outlined"
+                          style={{
+                            fontSize: '18px',
+                            fontVariationSettings: isSaved ? "'FILL' 1" : "'FILL' 0"
+                          }}
+                        >
+                          {isSaved ? 'bookmark' : 'bookmark_border'}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* 6. DAILY REFLECTION (Connected to Supabase Spark Reflection) */}
       <section className="today-daily-reflection-section" aria-label="Daily Reflection">
         <div className="today-section-header">
           <h3 className="today-section-title">DAILY REFLECTION</h3>

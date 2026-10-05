@@ -130,42 +130,44 @@
 /* Brand Logo Container */
 .drcubie-loader-logo-wrap {
   position: relative;
-  width: clamp(72px, 18vw, 88px);
-  height: clamp(72px, 18vw, 88px);
-  margin-bottom: 20px;
+  width: clamp(100px, 26vw, 136px);
+  height: clamp(75px, 20vw, 100px);
+  margin-bottom: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
-/* Soft Breathing Aura around logo */
+.drcubie-loader-logo-wrap--contained {
+  width: clamp(76px, 20vw, 96px);
+  height: clamp(56px, 15vw, 70px);
+  margin-bottom: 14px;
+}
+
+/* Aura disabled so there is no outline, box, or glow halo framing the logo */
 .drcubie-loader-aura {
-  position: absolute;
-  inset: -14px;
-  border-radius: 34px;
-  background: radial-gradient(
-    circle,
-    rgba(29, 78, 216, 0.22) 0%,
-    rgba(0, 40, 142, 0.1) 45%,
-    transparent 72%
-  );
-  animation: drcubieAuraPulse 3s ease-in-out infinite;
-  pointer-events: none;
-  will-change: transform, opacity;
+  display: none !important;
 }
 
-/* Crisp Brand Mark Frame */
+/* Crisp Brand Mark Frame - Clean, No border, No outline, No card background */
 .drcubie-loader-logo-frame {
   position: relative;
   width: 100%;
   height: 100%;
-  border-radius: 24px;
-  overflow: hidden;
-  box-shadow: 
-    0 16px 36px -6px rgba(0, 40, 142, 0.22),
-    0 4px 12px rgba(0, 40, 142, 0.1),
-    0 0 0 1px rgba(255, 255, 255, 0.8) inset;
-  background-color: #00288e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0 !important;
+  overflow: visible !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  outline: none !important;
   animation: drcubieLogoSubtleBreathe 3s ease-in-out infinite;
   will-change: transform;
 }
@@ -173,8 +175,16 @@
 .drcubie-loader-logo-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain !important;
   display: block;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 /* Brand Typography */
@@ -365,7 +375,7 @@
   }
   
   .drcubie-loader-logo-wrap {
-    width: 52px;
+    width: 72px;
     height: 52px;
     margin-bottom: 10px;
   }
