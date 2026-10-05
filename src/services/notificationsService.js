@@ -248,7 +248,7 @@ export const markAllNotificationsAsRead = async (userId) => {
 };
 
 /**
- * Create a new notification for a user.
+ * Create a new notification for a user and trigger server-side push delivery.
  */
 export const createNotification = async ({
   userId,
@@ -256,7 +256,9 @@ export const createNotification = async ({
   message,
   type = 'general',
   relatedContentId = null,
-  relatedContentType = null
+  relatedContentType = null,
+  route = null,
+  dispatchPush = true
 }) => {
   if (!supabase || !userId || !title || !message) {
     return { success: false, error: 'Missing required notification fields' };
@@ -280,6 +282,34 @@ export const createNotification = async ({
     if (error) {
       console.warn('[NotificationsService] createNotification error:', error.message);
       return { success: false, error: error.message };
+    }
+
+    // Trigger server-side push notification via Edge Function (non-blocking)
+    if (dispatchPush && data) {
+      const destination = route || getNotificationRoute({ type, relatedContentId, relatedContentType });
+      supabase.functions
+        .invoke('send-push-notification', {
+          body: {
+            notificationId: data.id,
+            userId,
+            title,
+            message,
+            type,
+            relatedContentId,
+            relatedContentType,
+            route: destination
+          }
+        })
+        .then(({ data: pushRes, error: pushErr }) => {
+          if (pushErr) {
+            console.warn('[NotificationsService] Push delivery dispatch error:', pushErr.message);
+          } else {
+            console.log('[NotificationsService] Push delivery result:', pushRes);
+          }
+        })
+        .catch((pushErr) => {
+          console.warn('[NotificationsService] Push delivery dispatch note:', pushErr?.message || pushErr);
+        });
     }
 
     return { success: true, data };

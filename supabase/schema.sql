@@ -779,4 +779,161 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.register_user(text, text, text) TO anon, authenticated, service_role;
 
+-- ==============================================================================
+-- 10. USER PUSH TOKENS TABLE & DEVICE MANAGEMENT (FCM & Push Notifications)
+-- ==============================================================================
+
+CREATE TABLE IF NOT EXISTS public.user_push_tokens (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  fcm_token text NOT NULL,
+  platform text NOT NULL CHECK (platform IN ('android', 'ios', 'web')),
+  device_id text,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT timezone('utc'::text, now()),
+  updated_at timestamptz NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT user_push_tokens_user_token_unique UNIQUE (user_id, fcm_token)
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_tokens_user_active 
+  ON public.user_push_tokens (user_id) 
+  WHERE is_active = true;
+
+CREATE INDEX IF NOT EXISTS idx_push_tokens_fcm_token 
+  ON public.user_push_tokens (fcm_token);
+
+CREATE INDEX IF NOT EXISTS idx_push_tokens_platform
+  ON public.user_push_tokens (platform);
+
+ALTER TABLE public.user_push_tokens ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view only their own push tokens" ON public.user_push_tokens;
+CREATE POLICY "Users can view only their own push tokens"
+  ON public.user_push_tokens FOR SELECT
+  USING (auth.uid() = user_id OR public.is_admin());
+
+DROP POLICY IF EXISTS "Users can insert only their own push tokens" ON public.user_push_tokens;
+CREATE POLICY "Users can insert only their own push tokens"
+  ON public.user_push_tokens FOR INSERT
+  WITH CHECK (auth.uid() = user_id OR public.is_admin());
+
+DROP POLICY IF EXISTS "Users can update only their own push tokens" ON public.user_push_tokens;
+CREATE POLICY "Users can update only their own push tokens"
+  ON public.user_push_tokens FOR UPDATE
+  USING (auth.uid() = user_id OR public.is_admin())
+  WITH CHECK (auth.uid() = user_id OR public.is_admin());
+
+DROP POLICY IF EXISTS "Users can delete only their own push tokens" ON public.user_push_tokens;
+CREATE POLICY "Users can delete only their own push tokens"
+  ON public.user_push_tokens FOR DELETE
+  USING (auth.uid() = user_id OR public.is_admin());
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_push_tokens TO authenticated;
+GRANT ALL ON TABLE public.user_push_tokens TO service_role;
+
+DROP TRIGGER IF EXISTS set_user_push_tokens_updated_at ON public.user_push_tokens;
+CREATE TRIGGER set_user_push_tokens_updated_at
+  BEFORE UPDATE ON public.user_push_tokens
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_updated_at();
+
+CREATE OR REPLACE FUNCTION public.register_push_token(
+  p_fcm_token text,
+  p_platform text,
+  p_device_id text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+AS $$
+DECLARE
+  v_user_id uuid;
+  v_record public.user_push_tokens;
+BEGIN
+  v_user_id := auth.uid();
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication required to register push token';
+  END IF;
+
+  IF p_fcm_token IS NULL OR trim(p_fcm_token) = '' THEN
+    RAISE EXCEPTION 'Valid FCM token is required';
+  END IF;
+
+  IF p_platform NOT IN ('android', 'ios', 'web') THEN
+    RAISE EXCEPTION 'Invalid platform. Must be android, ios, or web';
+  END IF;
+
+  -- 1. Deactivate this token for any other user on this device
+  UPDATE public.user_push_tokens
+  SET is_active = false, updated_at = timezone('utc'::text, now())
+  WHERE fcm_token = p_fcm_token AND user_id <> v_user_id;
+
+  -- 2. Upsert token for current user
+  INSERT INTO public.user_push_tokens (
+    user_id,
+    fcm_token,
+    platform,
+    device_id,
+    is_active,
+    created_at,
+    updated_at
+  )
+  VALUES (
+    v_user_id,
+    p_fcm_token,
+    p_platform,
+    p_device_id,
+    true,
+    timezone('utc'::text, now()),
+    timezone('utc'::text, now())
+  )
+  ON CONFLICT (user_id, fcm_token)
+  DO UPDATE SET
+    platform = EXCLUDED.platform,
+    device_id = COALESCE(EXCLUDED.device_id, public.user_push_tokens.device_id),
+    is_active = true,
+    updated_at = timezone('utc'::text, now())
+  RETURNING * INTO v_record;
+
+  RETURN jsonb_build_object(
+    'id', v_record.id,
+    'user_id', v_record.user_id,
+    'fcm_token', v_record.fcm_token,
+    'platform', v_record.platform,
+    'device_id', v_record.device_id,
+    'is_active', v_record.is_active,
+    'updated_at', v_record.updated_at
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.register_push_token(text, text, text) TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.deactivate_push_token(
+  p_fcm_token text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+AS $$
+DECLARE
+  v_user_id uuid;
+BEGIN
+  v_user_id := auth.uid();
+  IF v_user_id IS NULL THEN
+    RETURN false;
+  END IF;
+
+  UPDATE public.user_push_tokens
+  SET is_active = false, updated_at = timezone('utc'::text, now())
+  WHERE user_id = v_user_id AND fcm_token = p_fcm_token;
+
+  RETURN true;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.deactivate_push_token(text) TO authenticated, service_role;
+
+
 

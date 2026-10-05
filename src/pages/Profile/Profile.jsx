@@ -28,6 +28,14 @@ import {
 } from '../../services/membershipsService';
 import { VideoPlayer } from '../../components/VideoPlayer/VideoPlayer';
 import { BrandedLoader } from '../../components/Common/AppLoader';
+import {
+  checkPushPermission,
+  requestPushPermission,
+  registerPushTokenInSupabase,
+  deactivatePushTokenInSupabase,
+  isNativePlatform
+} from '../../services/pushNotificationService';
+import { PushNotifications } from '@capacitor/push-notifications';
 import './Profile.css';
 
 export const Profile = () => {
@@ -289,6 +297,46 @@ export const Profile = () => {
   const deliveryTimeLabel = userPrefs.deliveryTimeLabel || getDeliveryTimeLabel(deliveryTime);
   const preferredTopicsList = Array.isArray(userPrefs.preferredTopics) ? userPrefs.preferredTopics : [];
   const preferredTopicsDisplay = preferredTopicsList.length > 0 ? preferredTopicsList.join(', ') : 'None selected';
+
+  // Push Notification permission state
+  const [pushStatus, setPushStatus] = useState('prompt'); // 'granted' | 'denied' | 'prompt'
+  const [isTogglingPush, setIsTogglingPush] = useState(false);
+
+  useEffect(() => {
+    checkPushPermission().then((status) => {
+      setPushStatus(status);
+    });
+  }, []);
+
+  const handleTogglePush = async () => {
+    if (isTogglingPush) return;
+    setIsTogglingPush(true);
+
+    try {
+      if (pushStatus === 'granted') {
+        await deactivatePushTokenInSupabase(user?.id);
+        setPushStatus('prompt');
+        if (showToast) showToast('Push notifications paused.');
+      } else {
+        const perm = await requestPushPermission();
+        setPushStatus(perm);
+        if (perm === 'granted') {
+          if (isNativePlatform()) {
+            await PushNotifications.register();
+          } else if (user?.id) {
+            await registerPushTokenInSupabase(user.id, `web_push_${user.id.slice(0, 8)}_${Date.now()}`);
+          }
+          if (showToast) showToast('Push notifications enabled!');
+        } else if (perm === 'denied') {
+          setActiveDialog('push-permission');
+        }
+      }
+    } catch (err) {
+      console.warn('[Profile] Error toggling push notifications:', err);
+    } finally {
+      setIsTogglingPush(false);
+    }
+  };
 
   const handleSignOut = async () => {
     try {
@@ -837,6 +885,51 @@ export const Profile = () => {
               <span className="material-symbols-outlined profile-row-chevron">chevron_right</span>
             </div>
           </button>
+
+          <div className="profile-divider" />
+
+          {/* Row 4: Push Notifications */}
+          <div className="profile-row-item">
+            <div className="profile-row-left">
+              <div className="profile-row-icon-circle">
+                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                  notifications_active
+                </span>
+              </div>
+              <div className="profile-row-text">
+                <span className="profile-row-title font-body-md">Push Notifications</span>
+                <span className="profile-row-sub font-label-sm">
+                  {pushStatus === 'granted'
+                    ? 'Active • Daily inspirations & reflections'
+                    : pushStatus === 'denied'
+                    ? 'Disabled in device settings'
+                    : 'Receive daily inspirations & streaks'}
+                </span>
+              </div>
+            </div>
+
+            <div className="profile-row-right">
+              {pushStatus === 'denied' ? (
+                <button
+                  type="button"
+                  className="profile-fix-perm-btn btn-pressable font-label-sm"
+                  onClick={() => setActiveDialog('push-permission')}
+                >
+                  Enable in Settings
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={`profile-toggle-switch ${pushStatus === 'granted' ? 'active' : ''}`}
+                  onClick={handleTogglePush}
+                  aria-label="Toggle push notifications"
+                  disabled={isTogglingPush}
+                >
+                  <div className="profile-toggle-thumb" />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -913,6 +1006,40 @@ export const Profile = () => {
               <span className="material-symbols-outlined profile-row-chevron">chevron_right</span>
             </div>
           </button>
+
+          {/* Row 3 (Admin Only): Admin Push Notification Console */}
+          {profile?.role === 'admin' && (
+            <>
+              <div className="profile-divider" />
+              <button
+                className="profile-row-item btn-pressable"
+                onClick={() => window.dispatchEvent(new CustomEvent('drcubie_open_admin_notifications'))}
+                type="button"
+                id="btn-open-admin-notif-console"
+              >
+                <div className="profile-row-left">
+                  <div className="profile-row-icon-circle" style={{ background: 'rgba(229, 169, 90, 0.2)', color: '#ffc67d' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                      campaign
+                    </span>
+                  </div>
+                  <div className="profile-row-text">
+                    <span className="profile-row-title font-body-md">Admin Push Notification Console</span>
+                    <span className="profile-row-sub font-label-sm">
+                      Send &amp; broadcast notifications to users
+                    </span>
+                  </div>
+                </div>
+
+                <div className="profile-row-right">
+                  <span className="profile-status-pill font-label-sm" style={{ background: 'rgba(229, 169, 90, 0.2)', color: '#ffc67d' }}>
+                    Admin
+                  </span>
+                  <span className="material-symbols-outlined profile-row-chevron">chevron_right</span>
+                </div>
+              </button>
+            </>
+          )}
         </div>
       </section>
 
@@ -1024,7 +1151,7 @@ export const Profile = () => {
       {/* Interactive Modal Sheet Dialogs — Portaled to document.body so the card stays fixed in the viewport while the background page scrolls */}
       {activeDialog && typeof document !== 'undefined' && createPortal(
         <div
-          className="profile-modal-backdrop animate-backdrop"
+          className={`profile-modal-backdrop animate-backdrop ${activeDialog === 'push-permission' ? 'push-perm-backdrop' : ''}`}
           onClick={handleBackdropClick}
           onWheel={handleBackdropWheel}
           onTouchStart={handleBackdropTouchStart}
@@ -1033,7 +1160,10 @@ export const Profile = () => {
           role="dialog"
           aria-modal="true"
         >
-          <div className="profile-modal-card animate-slide-up" onClick={(e) => e.stopPropagation()}>
+          <div
+            className={`profile-modal-card animate-slide-up ${activeDialog === 'push-permission' ? 'profile-push-perm-card' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* View Current Profile Picture */}
             {activeDialog === 'avatar-view' && (
               <>
@@ -1672,6 +1802,80 @@ export const Profile = () => {
                 )}
               </>
             )}
+
+            {/* Push Notification Permission Help Modal */}
+            {activeDialog === 'push-permission' && (
+              <>
+                <div className="profile-push-perm-header">
+                  <div className="profile-push-perm-handle" />
+                  <button
+                    type="button"
+                    className="profile-push-perm-close-btn btn-pressable"
+                    onClick={() => setActiveDialog(null)}
+                    aria-label="Close dialog"
+                  >
+                    <span className="material-symbols-outlined">close</span>
+                  </button>
+                </div>
+
+                <div className="profile-push-perm-hero">
+                  <div className="profile-push-perm-icon-ring">
+                    <div className="profile-push-perm-icon-inner">
+                      <span className="material-symbols-outlined profile-push-perm-icon">
+                        notifications_active
+                      </span>
+                    </div>
+                  </div>
+                  <h3 className="profile-push-perm-title font-title-lg">
+                    Notifications Disabled
+                  </h3>
+                  <p className="profile-push-perm-subtitle font-body-md">
+                    Device permissions need to be enabled so Dr. Cubie can deliver your daily wisdom sparks and reflection reminders.
+                  </p>
+                </div>
+
+                <div className="profile-push-perm-steps">
+                  <div className="profile-push-perm-step-card">
+                    <div className="profile-push-step-badge">
+                      <span className="material-symbols-outlined">settings</span>
+                    </div>
+                    <div className="profile-push-step-content">
+                      <div className="profile-push-step-title font-label-md">How to re-enable</div>
+                      <div className="profile-push-step-desc font-body-sm">
+                        Open device <strong>Settings</strong> → <strong>Apps</strong> → <strong>Dr. Cubie</strong> → <strong>Notifications</strong> → Turn on <strong>Allow Notifications</strong>.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="profile-push-perm-actions">
+                  <button
+                    type="button"
+                    className="profile-push-perm-btn primary btn-pressable"
+                    onClick={async () => {
+                      setActiveDialog(null);
+                      const status = await checkPushPermission();
+                      setPushStatus(status);
+                      if (status === 'granted') {
+                        if (showToast) showToast('Push notifications successfully enabled!');
+                      }
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                      check_circle
+                    </span>
+                    <span>I've Enabled It</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="profile-push-perm-btn secondary btn-pressable"
+                    onClick={() => setActiveDialog(null)}
+                  >
+                    Maybe Later
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>,
         document.body
@@ -1724,6 +1928,8 @@ export const Profile = () => {
         </div>,
         document.body
       )}
+
+
     </div>
   );
 };

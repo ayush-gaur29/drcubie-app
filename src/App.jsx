@@ -30,6 +30,12 @@ import {
   getNotificationRoute
 } from './services/notificationsService';
 import { getUserPreferences, isSparkDeliveredForUser } from './services/userPreferencesService';
+import { NotificationBanner } from './components/NotificationBanner/NotificationBanner';
+import { AdminNotificationModal } from './components/Admin/AdminNotificationModal';
+import {
+  initializePushListeners,
+  isNotificationDuplicate
+} from './services/pushNotificationService';
 
 /**
  * AppShell manages application routes, authenticated state coordination,
@@ -60,10 +66,18 @@ const AppShell = () => {
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [notificationsError, setNotificationsError] = useState(null);
 
+  // In-app foreground push notification banner & Admin modal
+  const [activeInAppBanner, setActiveInAppBanner] = useState(null);
+  const [isAdminNotifModalOpen, setIsAdminNotifModalOpen] = useState(false);
+
   // Sync hash changes with app route
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#/', '').replace('#', '');
+      if (hash === 'admin-notifications') {
+        setIsAdminNotifModalOpen(true);
+        return;
+      }
       if (hash) {
         setRoute(hash);
       }
@@ -71,6 +85,15 @@ const AppShell = () => {
 
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Listen for admin modal open custom event
+  useEffect(() => {
+    const handleOpenAdmin = () => {
+      setIsAdminNotifModalOpen(true);
+    };
+    window.addEventListener('drcubie_open_admin_notifications', handleOpenAdmin);
+    return () => window.removeEventListener('drcubie_open_admin_notifications', handleOpenAdmin);
   }, []);
 
   const navigateTo = useCallback((newRoute) => {
@@ -151,13 +174,14 @@ const AppShell = () => {
     setLoadingNotifications(false);
   }, []);
 
-  // Sync notifications on auth state changes (login / logout) & set up realtime
+  // Sync notifications on auth state changes (login / logout) & set up realtime + native push
   useEffect(() => {
     if (!isAuthenticated || !user?.id) {
       // Clear notifications on logout
       setNotifications([]);
       setUnreadCount(0);
       setIsNotifPopupOpen(false);
+      setActiveInAppBanner(null);
       setNotificationsError(null);
       return;
     }
@@ -172,8 +196,34 @@ const AppShell = () => {
     window.addEventListener('drcubie_preferences_updated', handlePrefChange);
 
     // Subscribe to realtime updates for this user
-    const subscription = subscribeToUserNotifications(user.id, () => {
+    const subscription = subscribeToUserNotifications(user.id, (payload) => {
+      if (payload?.eventType === 'INSERT' && payload.new) {
+        const notif = payload.new;
+        if (!isNotificationDuplicate(notif.id)) {
+          setActiveInAppBanner(notif);
+        }
+      }
       loadNotifications(user.id);
+    });
+
+    // Initialize Native & Web Push Notification listeners (FCM foreground & background click handling)
+    let pushCleanup = null;
+    initializePushListeners({
+      userId: user.id,
+      onNotificationReceived: (pushNotif) => {
+        if (!isNotificationDuplicate(pushNotif.id)) {
+          setActiveInAppBanner(pushNotif);
+        }
+        loadNotifications(user.id);
+      },
+      onNotificationTapped: (targetRoute, notifData) => {
+        if (notifData?.id && user?.id) {
+          markNotificationAsRead(notifData.id, user.id);
+        }
+        navigateTo(targetRoute || 'notifications');
+      }
+    }).then((res) => {
+      pushCleanup = res?.cleanup;
     });
 
     return () => {
@@ -181,8 +231,11 @@ const AppShell = () => {
       if (subscription && typeof subscription.unsubscribe === 'function') {
         subscription.unsubscribe();
       }
+      if (typeof pushCleanup === 'function') {
+        pushCleanup();
+      }
     };
-  }, [isAuthenticated, user?.id, loadNotifications]);
+  }, [isAuthenticated, user?.id, loadNotifications, navigateTo]);
 
   // Handle individual notification click
   const handleNotificationClick = async (item) => {
@@ -386,6 +439,23 @@ const AppShell = () => {
 
         {/* Shared Notification Toast */}
         <Toast />
+
+        {/* Realtime / Foreground In-App Push Notification Banner */}
+        <NotificationBanner
+          notification={activeInAppBanner}
+          onClose={() => setActiveInAppBanner(null)}
+          onClick={handleNotificationClick}
+        />
+
+        {/* Admin Push Notification Console */}
+        <AdminNotificationModal
+          isOpen={isAdminNotifModalOpen}
+          onClose={() => setIsAdminNotifModalOpen(false)}
+          currentUserId={user?.id}
+          onNotificationCreated={() => {
+            if (user?.id) loadNotifications(user.id);
+          }}
+        />
 
         {/* Shared Auth Modal Sheet */}
         <AuthModal />

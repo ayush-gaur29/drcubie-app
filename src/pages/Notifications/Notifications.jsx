@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import {
   formatNotificationTime,
@@ -6,6 +6,13 @@ import {
   groupNotificationsByTime,
   getNotificationRoute
 } from '../../services/notificationsService';
+import {
+  checkPushPermission,
+  requestPushPermission,
+  registerPushTokenInSupabase,
+  isNativePlatform
+} from '../../services/pushNotificationService';
+import { PushNotifications } from '@capacitor/push-notifications';
 import './Notifications.css';
 
 export const Notifications = ({
@@ -18,8 +25,26 @@ export const Notifications = ({
   onNavigate,
   onRefresh
 }) => {
-  const { isAuthenticated, openAuth } = useAuth();
+  const { user, isAuthenticated, openAuth } = useAuth();
   const [filter, setFilter] = useState('all'); // 'all' | 'unread'
+  const [pushStatus, setPushStatus] = useState('granted');
+  const [dismissedPushBanner, setDismissedPushBanner] = useState(false);
+
+  useEffect(() => {
+    checkPushPermission().then(setPushStatus);
+  }, []);
+
+  const handleEnablePush = async () => {
+    const res = await requestPushPermission();
+    setPushStatus(res);
+    if (res === 'granted') {
+      if (isNativePlatform()) {
+        await PushNotifications.register();
+      } else if (user?.id) {
+        await registerPushTokenInSupabase(user.id, `web_push_${user.id.slice(0, 8)}_${Date.now()}`);
+      }
+    }
+  };
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
@@ -76,6 +101,37 @@ export const Notifications = ({
             </button>
           )}
         </div>
+
+        {/* Subtle Push Permission Banner */}
+        {isAuthenticated && pushStatus === 'prompt' && !dismissedPushBanner && (
+          <div className="notif-permission-banner">
+            <div className="notif-perm-banner-left">
+              <span className="material-symbols-outlined" style={{ color: '#ffc67d', fontSize: '20px' }}>
+                notifications_active
+              </span>
+              <span className="font-body-sm notif-perm-banner-text">
+                Enable push notifications to receive your Daily Spark right on time.
+              </span>
+            </div>
+            <div className="notif-perm-banner-actions">
+              <button
+                type="button"
+                className="notif-perm-enable-btn btn-pressable font-label-sm"
+                onClick={handleEnablePush}
+              >
+                Enable
+              </button>
+              <button
+                type="button"
+                className="notif-perm-dismiss-btn"
+                onClick={() => setDismissedPushBanner(true)}
+                aria-label="Dismiss banner"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Filter Tabs */}
         {isAuthenticated && notifications.length > 0 && (

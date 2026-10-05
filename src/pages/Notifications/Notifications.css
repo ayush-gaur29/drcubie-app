@@ -478,3 +478,72 @@
     height: 36px;
   }
 }
+
+/* Push Notification Permission Callout Banner */
+.notif-permission-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: rgba(229, 169, 90, 0.1);
+  border: 1px solid rgba(229, 169, 90, 0.25);
+  border-radius: 1rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.notif-perm-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.notif-perm-banner-text {
+  color: #ffddb6;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.notif-perm-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.notif-perm-enable-btn {
+  background: #e5a95a;
+  border: none;
+  color: #2a1800;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.notif-perm-enable-btn:hover {
+  background: #fcba61;
+}
+
+.notif-perm-dismiss-btn {
+  background: transparent;
+  border: none;
+  color: #9d8e7f;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.notif-perm-dismiss-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e1e2e9;
+}
+

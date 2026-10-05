@@ -1,0 +1,10 @@
+{
+  "appId": "com.drcubie.app",
+  "appName": "Dr. Cubie",
+  "webDir": "dist",
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}

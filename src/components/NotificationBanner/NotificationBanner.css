@@ -1,0 +1,265 @@
+/* ==========================================================================
+   In-App Notification Banner Toast - Dr. Cubie Light Theme
+   ========================================================================== */
+
+.in-app-banner-overlay {
+  position: fixed;
+  top: max(env(safe-area-inset-top, 0px) + 8px, 12px);
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  padding: 0 1rem;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.in-app-banner-card {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 400px;
+  background-color: var(--color-surface-container-lowest, #ffffff);
+  border: 1px solid var(--color-border-subtle, #e2e8f0);
+  border-radius: var(--radius-lg, 16px);
+  padding: 10px 12px 11px 11px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  box-shadow: 
+    0 8px 24px -4px rgba(0, 40, 142, 0.12),
+    0 2px 6px rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+  transition: transform var(--transition-fast, 150ms ease), box-shadow var(--transition-fast, 150ms ease), border-color var(--transition-fast, 150ms ease);
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.in-app-banner-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(0, 40, 142, 0.22);
+  box-shadow: 
+    0 12px 30px -4px rgba(0, 40, 142, 0.16),
+    0 4px 10px rgba(15, 23, 42, 0.06);
+}
+
+.in-app-banner-card:active {
+  transform: scale(0.99);
+}
+
+/* Subtle, smooth native slide and fade animations */
+.banner-entering {
+  animation: bannerSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.banner-exiting {
+  animation: bannerSlideOut 0.22s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes bannerSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes bannerSlideOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+}
+
+/* Integrated Icon Badge (Clean Dr. Cubie Blue / Category System) */
+.in-app-banner-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md, 10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  background-color: var(--color-surface-container, #eaedff);
+  color: var(--color-primary, #00288e);
+  border: 1px solid rgba(0, 40, 142, 0.1);
+}
+
+.in-app-banner-icon .material-symbols-outlined {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.in-app-banner-icon.spark {
+  background-color: var(--color-surface-container, #eaedff);
+  color: var(--color-primary, #00288e);
+  border-color: rgba(0, 40, 142, 0.12);
+}
+
+.in-app-banner-icon.vip {
+  background: rgba(229, 169, 90, 0.16);
+  color: #b45309;
+  border-color: rgba(229, 169, 90, 0.3);
+}
+
+.in-app-banner-icon.video {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.in-app-banner-icon.audio {
+  background: rgba(147, 51, 234, 0.12);
+  color: #7e22ce;
+  border-color: rgba(147, 51, 234, 0.2);
+}
+
+/* Clean Column Hierarchy */
+.in-app-banner-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.in-app-banner-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.in-app-banner-brand {
+  font-family: var(--font-ui, 'Plus Jakarta Sans', sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-primary, #00288e);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.in-app-banner-dot {
+  color: var(--color-outline-variant, #c4c5d5);
+  font-size: 9px;
+  line-height: 1;
+}
+
+.in-app-banner-now {
+  font-family: var(--font-ui, 'Plus Jakarta Sans', sans-serif);
+  color: var(--color-secondary, #4f5c8e);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.in-app-banner-title {
+  margin: 0;
+  font-family: var(--font-ui, 'Plus Jakarta Sans', sans-serif);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-on-surface, #131b2e);
+  line-height: 1.35;
+  letter-spacing: -0.1px;
+  word-break: break-word;
+}
+
+.in-app-banner-message {
+  margin: 1px 0 0 0;
+  font-family: var(--font-ui, 'Plus Jakarta Sans', sans-serif);
+  font-size: 12.5px;
+  color: var(--color-on-surface-variant, #444653);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+/* Compact Close Button */
+.in-app-banner-actions {
+  display: flex;
+  align-items: flex-start;
+  flex-shrink: 0;
+  margin-left: 2px;
+  margin-top: -2px;
+}
+
+.in-app-banner-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-outline, #757684);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-full, 9999px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast, 150ms ease);
+  padding: 0;
+}
+
+.in-app-banner-close-btn .material-symbols-outlined {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.in-app-banner-close-btn:hover {
+  background-color: var(--color-surface-container, #eaedff);
+  color: var(--color-on-surface, #131b2e);
+  transform: scale(1.08);
+}
+
+.in-app-banner-close-btn:active {
+  transform: scale(0.92);
+}
+
+/* ==========================================================================
+   Responsive Adaptations
+   ========================================================================== */
+
+/* Mobile Portrait */
+@media (max-width: 480px) {
+  .in-app-banner-overlay {
+    padding: 0 0.75rem;
+    top: max(env(safe-area-inset-top, 0px) + 8px, 10px);
+  }
+
+  .in-app-banner-card {
+    max-width: calc(100vw - 1.5rem);
+    padding: 9px 11px 9px 10px;
+    border-radius: var(--radius-md, 14px);
+    gap: 9px;
+  }
+}
+
+/* Mobile Landscape */
+@media (max-height: 480px) and (orientation: landscape) {
+  .in-app-banner-overlay {
+    top: max(env(safe-area-inset-top, 0px) + 4px, 6px);
+  }
+
+  .in-app-banner-card {
+    max-width: 420px;
+    padding: 7px 11px 7px 9px;
+  }
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  .banner-entering,
+  .banner-exiting {
+    animation: none;
+    transition: opacity 0.15s ease;
+  }
+}
