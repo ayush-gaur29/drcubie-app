@@ -310,9 +310,9 @@ serve(async (req: Request) => {
       if (type === 'spark' || relatedContentType === 'spark') {
         finalRoute = relatedContentId ? `spark/${relatedContentId}` : 'today';
       } else if (type === 'video' || relatedContentType === 'video') {
-        finalRoute = relatedContentId ? `videos/${relatedContentId}` : 'videos';
+        finalRoute = relatedContentId ? `videos/videos/${relatedContentId}` : 'videos';
       } else if (type === 'audio' || relatedContentType === 'audio') {
-        finalRoute = relatedContentId ? `audios/${relatedContentId}` : 'audios';
+        finalRoute = relatedContentId ? `audios/audios/${relatedContentId}` : 'audios';
       } else if (type === 'vip' || relatedContentType === 'vip') {
         finalRoute = 'vip-pass';
       } else if (type === 'streak' || type === 'profile') {

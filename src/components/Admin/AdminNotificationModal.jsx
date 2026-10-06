@@ -2,6 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { createNotification } from '../../services/notificationsService';
 import { triggerPushNotification } from '../../services/pushNotificationService';
+import { fetchSparks } from '../../services/sparksService';
+import { fetchVideos } from '../../services/videosService';
+import { fetchAudios } from '../../services/audiosService';
+import { VIDEOS } from '../../data/videos';
+import { ALL_AUDIOS } from '../../data/audios';
 import './AdminNotificationModal.css';
 
 /**
@@ -9,10 +14,11 @@ import './AdminNotificationModal.css';
  *
  * Allows Admins to:
  * 1. Target a specific user, multiple users, or broadcast to all users
- * 2. Craft custom or template-based notifications
- * 3. Save authoritative record to Supabase 'notifications' table FIRST
- * 4. Dispatch FCM push notification via Supabase Edge Function 'send-push-notification'
- * 5. Review live delivery reports (total devices, success count, stale token cleanups)
+ * 2. Select Tap Action / Destination (Inbox, Today, Specific Spark, Specific Video, Specific Audio, VIP Pass)
+ * 3. Automatically map destination to push payload (type, route, relatedContentId, relatedContentType)
+ * 4. Save authoritative record to Supabase 'notifications' table FIRST
+ * 5. Dispatch FCM push notification via Supabase Edge Function 'send-push-notification'
+ * 6. Review live delivery reports (total devices, success count, stale token cleanups)
  */
 export const AdminNotificationModal = ({
   isOpen,
@@ -27,15 +33,95 @@ export const AdminNotificationModal = ({
 
   const [title, setTitle] = useState("Today's Spark is Ready");
   const [message, setMessage] = useState("Begin your morning pause with 'Focused Believing'.");
-  const [type, setType] = useState('spark');
-  const [route, setRoute] = useState('today');
-  const [relatedContentId, setRelatedContentId] = useState('');
+
+  // Tap Action / Destination selection state:
+  // Options: 'inbox' | 'today' | 'spark' | 'video' | 'audio' | 'vip'
+  const [tapAction, setTapAction] = useState('today');
+
+  // Dynamic Content Collections
+  const [sparksList, setSparksList] = useState([]);
+  const [videosList, setVideosList] = useState([]);
+  const [audiosList, setAudiosList] = useState([]);
+
+  // Selected Content IDs (dynamic)
+  const [selectedSparkId, setSelectedSparkId] = useState('');
+  const [selectedVideoId, setSelectedVideoId] = useState('');
+  const [selectedAudioId, setSelectedAudioId] = useState('');
 
   const [isSending, setIsSending] = useState(false);
   const [deliveryResult, setDeliveryResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Load existing users from profiles when modal opens
+  // Computes authoritative payload mapping from selected Tap Action and dynamic content IDs
+  const getMappedPayload = (
+    action = tapAction,
+    sparkId = selectedSparkId,
+    videoId = selectedVideoId,
+    audioId = selectedAudioId
+  ) => {
+    switch (action) {
+      case 'inbox':
+        return {
+          type: 'general',
+          route: 'notifications',
+          relatedContentId: null,
+          relatedContentType: null
+        };
+      case 'today':
+        return {
+          type: 'general',
+          route: 'today',
+          relatedContentId: null,
+          relatedContentType: null
+        };
+      case 'spark': {
+        const activeSparkId =
+          sparkId || (sparksList[0]?.id || sparksList[0]?.slug) || 'focused-believing';
+        return {
+          type: 'spark',
+          route: `spark/${activeSparkId}`,
+          relatedContentId: activeSparkId,
+          relatedContentType: 'spark'
+        };
+      }
+      case 'video': {
+        const activeVideoId =
+          videoId || (videosList[0]?.id) || 'daily-motivation';
+        return {
+          type: 'video',
+          route: `videos/videos/${activeVideoId}`,
+          relatedContentId: activeVideoId,
+          relatedContentType: 'video'
+        };
+      }
+      case 'audio': {
+        const activeAudioId =
+          audioId || (audiosList[0]?.id) || 'morning-calm';
+        return {
+          type: 'audio',
+          route: `audios/audios/${activeAudioId}`,
+          relatedContentId: activeAudioId,
+          relatedContentType: 'audio'
+        };
+      }
+      case 'vip':
+        return {
+          type: 'vip',
+          route: 'vip-pass',
+          relatedContentId: null,
+          relatedContentType: null
+        };
+      default:
+        return {
+          type: 'general',
+          route: 'today',
+          relatedContentId: null,
+          relatedContentType: null
+        };
+    }
+  };
+
+  // Load profiles and content catalogs when modal opens
   useEffect(() => {
     if (!isOpen || !supabase) return;
 
@@ -64,7 +150,39 @@ export const AdminNotificationModal = ({
       }
     };
 
+    const loadContentData = async () => {
+      try {
+        const [sparksRes, vidsRes, audsRes] = await Promise.allSettled([
+          fetchSparks(),
+          fetchVideos(),
+          fetchAudios()
+        ]);
+
+        if (sparksRes.status === 'fulfilled' && Array.isArray(sparksRes.value) && sparksRes.value.length > 0) {
+          setSparksList(sparksRes.value);
+          setSelectedSparkId((prev) => prev || sparksRes.value[0].id || sparksRes.value[0].slug);
+        }
+
+        const resolvedVideos =
+          vidsRes.status === 'fulfilled' && Array.isArray(vidsRes.value) && vidsRes.value.length > 0
+            ? vidsRes.value
+            : Object.values(VIDEOS);
+        setVideosList(resolvedVideos);
+        setSelectedVideoId((prev) => prev || resolvedVideos[0]?.id || '');
+
+        const resolvedAudios =
+          audsRes.status === 'fulfilled' && Array.isArray(audsRes.value) && audsRes.value.length > 0
+            ? audsRes.value
+            : ALL_AUDIOS;
+        setAudiosList(resolvedAudios);
+        setSelectedAudioId((prev) => prev || resolvedAudios[0]?.id || '');
+      } catch (err) {
+        console.warn('[AdminNotif] Error loading content lists:', err);
+      }
+    };
+
     loadProfiles();
+    loadContentData();
   }, [isOpen, selectedUserId]);
 
   if (!isOpen) return null;
@@ -74,23 +192,19 @@ export const AdminNotificationModal = ({
     if (tpl === 'spark') {
       setTitle("Today's Spark is Ready");
       setMessage("Begin your morning pause with 'Focused Believing'.");
-      setType('spark');
-      setRoute('today');
+      setTapAction('today');
     } else if (tpl === 'vip') {
       setTitle("Exclusive VIP Sanctuary Release");
       setMessage("Explore the new masterclass video contemplation now.");
-      setType('vip');
-      setRoute('vip-pass');
+      setTapAction('vip');
     } else if (tpl === 'streak') {
       setTitle("7-Day Stillness Streak!");
       setMessage("You've returned to your pause practice 7 days in a row.");
-      setType('streak');
-      setRoute('profile');
+      setTapAction('inbox');
     } else if (tpl === 'audio') {
       setTitle("New Evening Soundscape Available");
       setMessage("Deepen your evening wind-down with guided breath.");
-      setType('audio');
-      setRoute('audios');
+      setTapAction('audio');
     }
   };
 
@@ -112,6 +226,9 @@ export const AdminNotificationModal = ({
         throw new Error('Please select a target user.');
       }
 
+      // Compute mapped payload automatically
+      const mapped = getMappedPayload();
+
       // Step 1: Save Authoritative Notification Record to Supabase
       let createdNotifRecord = null;
       if (targetUser) {
@@ -119,10 +236,11 @@ export const AdminNotificationModal = ({
           userId: targetUser,
           title: title.trim(),
           message: message.trim(),
-          type,
-          relatedContentId: relatedContentId.trim() || null,
-          route,
-          dispatchPush: false // We trigger push explicitly below for detailed feedback
+          type: mapped.type,
+          relatedContentId: mapped.relatedContentId,
+          relatedContentType: mapped.relatedContentType,
+          route: mapped.route,
+          dispatchPush: false // Triggered explicitly below for telemetry
         });
 
         if (!notifRes.success) {
@@ -138,9 +256,10 @@ export const AdminNotificationModal = ({
         broadcast: isBroadcast,
         title: title.trim(),
         message: message.trim(),
-        type,
-        relatedContentId: relatedContentId.trim() || null,
-        route,
+        type: mapped.type,
+        relatedContentId: mapped.relatedContentId,
+        relatedContentType: mapped.relatedContentType,
+        route: mapped.route,
         dryRun: isDryRun
       });
 
@@ -171,6 +290,8 @@ export const AdminNotificationModal = ({
       setIsSending(false);
     }
   };
+
+  const currentMapped = getMappedPayload();
 
   return (
     <div className="admin-notif-backdrop" role="dialog" aria-modal="true" aria-labelledby="admin-notif-modal-title">
@@ -288,34 +409,118 @@ export const AdminNotificationModal = ({
             />
           </div>
 
-          {/* Type & Route Grid */}
-          <div className="admin-form-grid">
-            <div className="admin-form-group">
-              <label className="admin-form-label font-label-md">Notification Type</label>
+          {/* Tap Action / Destination Selector */}
+          <div className="admin-form-group">
+            <label className="admin-form-label font-label-md" htmlFor="admin-tap-action-select">
+              Tap Action / Destination
+            </label>
+            <select
+              id="admin-tap-action-select"
+              className="admin-form-select"
+              value={tapAction}
+              onChange={(e) => setTapAction(e.target.value)}
+            >
+              <option value="inbox">General App / Inbox</option>
+              <option value="today">Today Screen</option>
+              <option value="spark">Specific Spark</option>
+              <option value="video">Specific Video</option>
+              <option value="audio">Specific Audio</option>
+              <option value="vip">VIP Pass Page</option>
+            </select>
+          </div>
+
+          {/* Dynamic Target Item Selector */}
+          {tapAction === 'spark' && (
+            <div className="admin-form-group animate-fade-in">
+              <label className="admin-form-label font-label-md" htmlFor="admin-select-spark">
+                Target Spark
+              </label>
               <select
+                id="admin-select-spark"
                 className="admin-form-select"
-                value={type}
-                onChange={(e) => setType(e.target.value)}
+                value={selectedSparkId}
+                onChange={(e) => setSelectedSparkId(e.target.value)}
               >
-                <option value="spark">Spark (Daily Wisdom)</option>
-                <option value="video">Video</option>
-                <option value="audio">Audio</option>
-                <option value="vip">VIP Sanctuary</option>
-                <option value="streak">Streak Celebration</option>
-                <option value="general">General</option>
-                <option value="system">System</option>
+                {sparksList.length > 0 ? (
+                  sparksList.map((s) => (
+                    <option key={s.id || s.slug} value={s.id || s.slug}>
+                      {s.title} ({s.id || s.slug})
+                    </option>
+                  ))
+                ) : (
+                  <option value="focused-believing">Focused Believing (focused-believing)</option>
+                )}
               </select>
             </div>
+          )}
 
-            <div className="admin-form-group">
-              <label className="admin-form-label font-label-md">Destination Route</label>
-              <input
-                type="text"
-                className="admin-form-input"
-                value={route}
-                onChange={(e) => setRoute(e.target.value)}
-                placeholder="e.g. today, vip-pass, profile"
-              />
+          {tapAction === 'video' && (
+            <div className="admin-form-group animate-fade-in">
+              <label className="admin-form-label font-label-md" htmlFor="admin-select-video">
+                Target Video
+              </label>
+              <select
+                id="admin-select-video"
+                className="admin-form-select"
+                value={selectedVideoId}
+                onChange={(e) => setSelectedVideoId(e.target.value)}
+              >
+                {videosList.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.title} ({v.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {tapAction === 'audio' && (
+            <div className="admin-form-group animate-fade-in">
+              <label className="admin-form-label font-label-md" htmlFor="admin-select-audio">
+                Target Audio
+              </label>
+              <select
+                id="admin-select-audio"
+                className="admin-form-select"
+                value={selectedAudioId}
+                onChange={(e) => setSelectedAudioId(e.target.value)}
+              >
+                {audiosList.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.title} ({a.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Auto-Generated Payload Mapping Card */}
+          <div className="admin-payload-preview">
+            <div className="admin-payload-preview-header">
+              <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#ffc67d' }}>
+                tune
+              </span>
+              <span className="font-label-sm" style={{ color: '#ffc67d', fontWeight: 600 }}>
+                Auto-Mapped Push Payload
+              </span>
+            </div>
+            <div className="admin-payload-grid font-body-sm">
+              <div className="admin-payload-item">
+                <span className="admin-payload-key">type:</span>
+                <code className="admin-payload-val">{currentMapped.type}</code>
+              </div>
+              <div className="admin-payload-item">
+                <span className="admin-payload-key">route:</span>
+                <code className="admin-payload-val">{currentMapped.route}</code>
+              </div>
+              <div className="admin-payload-item">
+                <span className="admin-payload-key">relatedContentType:</span>
+                <code className="admin-payload-val">{currentMapped.relatedContentType || 'null'}</code>
+              </div>
+              <div className="admin-payload-item">
+                <span className="admin-payload-key">relatedContentId:</span>
+                <code className="admin-payload-val">{currentMapped.relatedContentId || 'null'}</code>
+              </div>
             </div>
           </div>
 

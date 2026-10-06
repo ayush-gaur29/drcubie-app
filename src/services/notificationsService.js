@@ -82,36 +82,72 @@ export const groupNotificationsByTime = (notifications = []) => {
 };
 
 /**
- * Returns destination route based on notification metadata.
+ * Single Authoritative Notification Route Resolver.
+ *
+ * Guarantees that:
+ * 1. The explicit `route` received in any notification payload (FCM data, action, or DB)
+ *    ALWAYS takes highest priority.
+ * 2. An Audio or Video notification NEVER converts into a Spark route under any circumstances.
+ * 3. Both raw objects, nested data payloads, and Supabase database rows resolve identically.
  */
-export const getNotificationRoute = (notification) => {
-  if (!notification) return 'today';
+export const resolveNotificationRoute = (rawPayload) => {
+  if (!rawPayload) return 'today';
 
-  const type = notification.type || '';
-  const relatedType = notification.related_content_type || notification.relatedContentType || '';
-  const relatedId = notification.related_content_id || notification.relatedContentId || '';
+  // Normalize payload: merge top-level and nested data properties
+  const data = (rawPayload.data && typeof rawPayload.data === 'object') ? rawPayload.data : {};
+  const notif = (rawPayload.notification && typeof rawPayload.notification === 'object') ? rawPayload.notification : {};
+  const merged = { ...rawPayload, ...notif, ...data };
 
-  if (type === 'spark' || relatedType === 'spark') {
-    return relatedId ? `spark/${relatedId}` : 'today';
+  // 1. HIGHEST PRIORITY: Explicit 'route' string
+  const rawRoute = merged.route || data.route || notif.route || rawPayload.route;
+  if (typeof rawRoute === 'string' && rawRoute.trim()) {
+    const cleanRoute = rawRoute.trim().replace(/^[#/]+/, '');
+    console.log('[NotificationRouter] Using explicit route:', cleanRoute);
+    return cleanRoute;
   }
-  if (type === 'video' || relatedType === 'video') {
-    return relatedId ? `spark/${relatedId}` : 'today';
+
+  // 2. Fallback resolution strictly using type, relatedContentType, and relatedContentId
+  const type = String(merged.type || '').trim().toLowerCase();
+  const relType = String(merged.related_content_type || merged.relatedContentType || '').trim().toLowerCase();
+  const relId = String(merged.related_content_id || merged.relatedContentId || '').trim();
+
+  console.log('[NotificationRouter] Resolving fallback route for:', { type, relType, relId });
+
+  // SPECIFIC AUDIO: Must ALWAYS route to audios/audios/{audioId}, NEVER to Spark!
+  if (type === 'audio' || relType === 'audio') {
+    return relId ? `audios/audios/${relId}` : 'audios';
   }
-  if (type === 'audio' || relatedType === 'audio') {
-    return relatedId ? `spark/${relatedId}` : 'today';
+
+  // SPECIFIC VIDEO: Must ALWAYS route to videos/videos/{videoId}, NEVER to Spark!
+  if (type === 'video' || relType === 'video') {
+    return relId ? `videos/videos/${relId}` : 'videos';
   }
-  if (type === 'vip' || relatedType === 'vip') {
+
+  // SPECIFIC SPARK: Only route to spark if explicitly a spark
+  if (type === 'spark' || relType === 'spark') {
+    return relId ? `spark/${relId}` : 'today';
+  }
+
+  // VIP
+  if (type === 'vip' || relType === 'vip') {
     return 'vip-pass';
   }
-  if (type === 'profile' || type === 'streak') {
+
+  // PROFILE / STREAK
+  if (type === 'streak' || type === 'profile') {
     return 'profile';
   }
-  if (notification.route) {
-    return notification.route;
+
+  // GENERAL APP / INBOX
+  if (type === 'general' || type === 'system') {
+    return 'notifications';
   }
 
   return 'today';
 };
+
+// Single Authoritative Alias
+export const getNotificationRoute = resolveNotificationRoute;
 
 /**
  * Material Symbol icon name for the notification type

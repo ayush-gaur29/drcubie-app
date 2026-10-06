@@ -28,6 +28,7 @@ import {
   markNotificationAsRead,
   markAllNotificationsAsRead,
   subscribeToUserNotifications,
+  resolveNotificationRoute,
   getNotificationRoute
 } from './services/notificationsService';
 import { getUserPreferences, isSparkDeliveredForUser } from './services/userPreferencesService';
@@ -35,7 +36,8 @@ import { NotificationBanner } from './components/NotificationBanner/Notification
 import { AdminNotificationModal } from './components/Admin/AdminNotificationModal';
 import {
   initializePushListeners,
-  isNotificationDuplicate
+  isNotificationDuplicate,
+  registerAppNavigateHandler
 } from './services/pushNotificationService';
 
 /**
@@ -175,7 +177,20 @@ const AppShell = () => {
     setLoadingNotifications(false);
   }, []);
 
-  // Sync notifications on auth state changes (login / logout) & set up realtime + native push
+  // Register global push deep-link handler so taps immediately navigate even during cold-boot
+  useEffect(() => {
+    registerAppNavigateHandler((targetRoute, notifData) => {
+      console.log('[App] Deep-link navigation triggered by push tap:', targetRoute);
+      if (notifData?.id && user?.id) {
+        markNotificationAsRead(notifData.id, user.id);
+      }
+      if (targetRoute) {
+        navigateTo(targetRoute);
+      }
+    });
+  }, [navigateTo, user?.id]);
+
+  // Sync notifications on auth state changes (login / logout) & set up realtime
   useEffect(() => {
     if (!isAuthenticated || !user?.id) {
       // Clear notifications on logout
@@ -207,38 +222,48 @@ const AppShell = () => {
       loadNotifications(user.id);
     });
 
-    // Initialize Native & Web Push Notification listeners (FCM foreground & background click handling)
+    return () => {
+      window.removeEventListener('drcubie_preferences_updated', handlePrefChange);
+      if (subscription && typeof subscription.unsubscribe === 'function') {
+        subscription.unsubscribe();
+      }
+    };
+  }, [isAuthenticated, user?.id, loadNotifications]);
+
+  // Initialize Native & Web Push Notification listeners eagerly on mount
+  useEffect(() => {
     let pushCleanup = null;
     initializePushListeners({
-      userId: user.id,
+      userId: user?.id || null,
       onNotificationReceived: (pushNotif) => {
         if (!isNotificationDuplicate(pushNotif.id)) {
           setActiveInAppBanner(pushNotif);
         }
-        loadNotifications(user.id);
+        if (user?.id) {
+          loadNotifications(user.id);
+        }
       },
       onNotificationTapped: (targetRoute, notifData) => {
+        console.log('[App] onNotificationTapped callback:', targetRoute, notifData);
         if (notifData?.id && user?.id) {
           markNotificationAsRead(notifData.id, user.id);
         }
-        navigateTo(targetRoute || 'notifications');
+        if (targetRoute) {
+          navigateTo(targetRoute);
+        }
       }
     }).then((res) => {
       pushCleanup = res?.cleanup;
     });
 
     return () => {
-      window.removeEventListener('drcubie_preferences_updated', handlePrefChange);
-      if (subscription && typeof subscription.unsubscribe === 'function') {
-        subscription.unsubscribe();
-      }
       if (typeof pushCleanup === 'function') {
         pushCleanup();
       }
     };
-  }, [isAuthenticated, user?.id, loadNotifications, navigateTo]);
+  }, [user?.id, loadNotifications, navigateTo]);
 
-  // Handle individual notification click
+  // Handle individual notification click (from Header bell popup, Notifications page, or In-App banner)
   const handleNotificationClick = async (item) => {
     if (!item) return;
 
@@ -255,11 +280,13 @@ const AppShell = () => {
       }
     }
 
-    // Close the preview popup
+    // Close preview popup and in-app banner
     setIsNotifPopupOpen(false);
+    setActiveInAppBanner(null);
 
-    // Navigate to content destination if present
-    const destination = getNotificationRoute(item);
+    // Navigate to content destination using single authoritative resolver
+    const destination = resolveNotificationRoute(item);
+    console.log('[App] Notification clicked, navigating to authoritative route:', destination, 'from item:', item);
     if (destination) {
       navigateTo(destination);
     }
@@ -292,17 +319,17 @@ const AppShell = () => {
   const isSparkDetail =
     (route.startsWith('spark/') && route !== 'spark') ||
     (route.startsWith('sparks/') && route !== 'sparks');
-  const currentSparkId = isSparkDetail ? route.replace(/^sparks?\//, '') : null;
+  const currentSparkId = isSparkDetail ? route.replace(/^(sparks?\/)+/, '') : null;
 
   const isVideoDetail =
     (route.startsWith('videos/') && route !== 'videos') ||
     (route.startsWith('video/') && route !== 'video');
-  const currentVideoId = isVideoDetail ? route.replace(/^videos?\//, '') : null;
+  const currentVideoId = isVideoDetail ? route.replace(/^(videos?\/)+/, '') : null;
 
   const isAudioDetail =
     (route.startsWith('audios/') && route !== 'audios') ||
     (route.startsWith('audio/') && route !== 'audio');
-  const currentAudioId = isAudioDetail ? route.replace(/^audios?\//, '') : null;
+  const currentAudioId = isAudioDetail ? route.replace(/^(audios?\/)+/, '') : null;
 
   return (
     <div className="app-wrapper">

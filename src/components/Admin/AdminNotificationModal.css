@@ -317,3 +317,56 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* Auto-Mapped Payload Preview Card */
+.admin-payload-preview {
+  background: #111319;
+  border: 1px solid rgba(229, 169, 90, 0.25);
+  border-radius: 0.85rem;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.admin-payload-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.admin-payload-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 1rem;
+}
+
+@media (max-width: 480px) {
+  .admin-payload-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-payload-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-payload-key {
+  color: #9d8e7f;
+  font-size: 12px;
+}
+
+.admin-payload-val {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.35rem;
+  color: #ffc67d;
+  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+

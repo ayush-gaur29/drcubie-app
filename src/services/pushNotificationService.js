@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { supabase } from '../lib/supabase';
-import { getNotificationRoute } from './notificationsService';
+import { resolveNotificationRoute, getNotificationRoute } from './notificationsService';
 
 /**
  * Push Notification Service for Dr. Cubie Inspiration.
@@ -20,6 +20,34 @@ const STORAGE_KEY_PUSH_ENABLED = 'drcubie_push_enabled';
 
 // In-memory set for deduplicating notifications across Realtime & FCM
 const seenNotificationIds = new Set();
+
+// Global deep-link navigation callback & buffered route for cold launches / terminated state
+let globalNavigateHandler = null;
+let pendingNotificationRoute = null;
+let pendingNotificationPayload = null;
+
+/**
+ * Register the top-level app router navigation handler.
+ * If a push notification was tapped while the app was cold-booting,
+ * the pending route is immediately dispatched to this handler upon registration.
+ */
+export const registerAppNavigateHandler = (handler) => {
+  globalNavigateHandler = handler;
+  if (pendingNotificationRoute && typeof handler === 'function') {
+    const routeToRun = pendingNotificationRoute;
+    const payloadToPass = pendingNotificationPayload;
+    pendingNotificationRoute = null;
+    pendingNotificationPayload = null;
+    console.log('[PushService] Executing buffered deep-link route on handler registration:', routeToRun);
+    try {
+      handler(routeToRun, payloadToPass);
+    } catch (e) {
+      console.warn('[PushService] Failed executing pending route:', e);
+    }
+  }
+};
+
+export const setAppNavigateHandler = registerAppNavigateHandler;
 
 /**
  * Deduplicate notification IDs across Realtime and FCM push delivery.
@@ -237,44 +265,82 @@ export const initializePushListeners = async ({
       'pushNotificationReceived',
       (notification) => {
         console.log('[PushService] Foreground push notification received:', notification);
-        const data = notification.data || {};
+        const data = (notification.data && typeof notification.data === 'object') ? notification.data : {};
         const notifId = data.notificationId || notification.id;
 
         // Prevent duplicate popups if Realtime already handled this notification
         if (notifId && isNotificationDuplicate(notifId)) {
+          console.log('[PushService] Deduplicating foreground push notification:', notifId);
           return;
         }
 
+        const normalizedNotif = {
+          ...notification,
+          ...data,
+          id: notifId,
+          notificationId: notifId,
+          title: notification.title,
+          message: notification.body,
+          type: data.type || notification.type || 'general',
+          route: data.route || notification.route || null,
+          relatedContentId: data.relatedContentId || data.related_content_id || null,
+          relatedContentType: data.relatedContentType || data.related_content_type || null,
+          related_content_id: data.relatedContentId || data.related_content_id || null,
+          related_content_type: data.relatedContentType || data.related_content_type || null,
+          data
+        };
+
         if (typeof onNotificationReceived === 'function') {
-          onNotificationReceived({
-            id: notifId,
-            title: notification.title,
-            message: notification.body,
-            type: data.type || 'general',
-            route: data.route,
-            data
-          });
+          onNotificationReceived(normalizedNotif);
         }
       }
     );
     listeners.push(recvListener);
 
-    // 4. Notification Action Performed Handler (Tap on notification)
+    // 4. Notification Action Performed Handler (Tap on notification in system tray)
     const actionListener = await PushNotifications.addListener(
       'pushNotificationActionPerformed',
       (action) => {
-        console.log('[PushService] Push notification tapped / opened:', action);
+        console.log('[PushService] Push notification tapped / opened:', JSON.stringify(action));
         const notif = action.notification || {};
-        const data = notif.data || {};
-        const targetRoute = data.route || getNotificationRoute(data) || 'notifications';
+        const data = (notif.data && typeof notif.data === 'object') ? notif.data : {};
 
+        // Merge all sources of metadata (action, notification, and FCM data payload)
+        const mergedPayload = {
+          ...action,
+          ...notif,
+          ...data,
+          id: data.notificationId || notif.id || action.id,
+          notificationId: data.notificationId || notif.id || action.id,
+          title: notif.title || action.title,
+          message: notif.body || action.body,
+          type: data.type || notif.type || 'general',
+          route: data.route || notif.route || null,
+          relatedContentId: data.relatedContentId || data.related_content_id || null,
+          relatedContentType: data.relatedContentType || data.related_content_type || null,
+          related_content_id: data.relatedContentId || data.related_content_id || null,
+          related_content_type: data.relatedContentType || data.related_content_type || null
+        };
+
+        // Determine destination route using single authoritative resolver
+        const targetRoute = resolveNotificationRoute(mergedPayload);
+        console.log('[PushService] Tapped notification resolved target route:', targetRoute, 'payload:', mergedPayload);
+
+        let handled = false;
         if (typeof onNotificationTapped === 'function') {
-          onNotificationTapped(targetRoute, {
-            id: data.notificationId || notif.id,
-            title: notif.title,
-            message: notif.body,
-            ...data
-          });
+          onNotificationTapped(targetRoute, mergedPayload);
+          handled = true;
+        }
+
+        if (typeof globalNavigateHandler === 'function') {
+          globalNavigateHandler(targetRoute, mergedPayload);
+          handled = true;
+        }
+
+        if (!handled) {
+          console.log('[PushService] App navigation handler not yet attached. Buffering target route:', targetRoute);
+          pendingNotificationRoute = targetRoute;
+          pendingNotificationPayload = mergedPayload;
         }
       }
     );
